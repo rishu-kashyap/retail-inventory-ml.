@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Inventory Risk & Reorder Ledger | RetailOpt AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Live Inventory Risk & Reorder Ledger</h1>
+    <p class="page-subtitle">Real-time tracking of on-hand inventory levels against ML safety buffers and replenishment triggers.</p>
+  </div>
+  <div style="display: flex; gap: 0.75rem;">
+    <button onclick="window.print()" class="btn btn-secondary">
+      <i class="fa-solid fa-print"></i> Export / Print
+    </button>
+    <a href="{{ url_for('predict') }}" class="btn btn-primary">
+      <i class="fa-solid fa-plus"></i> Calculate Reorder
+    </a>
+  </div>
+</div>
+
+<!-- Risk Filter Tabs -->
+<div style="display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+  <a href="{{ url_for('inventory', risk='ALL', store=store_filter, search=search_query) }}" 
+     class="btn {% if risk_filter == 'ALL' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-size: 0.85rem; padding: 0.45rem 1rem;">
+    All Items ({{ counts.ALL }})
+  </a>
+  <a href="{{ url_for('inventory', risk='STOCKOUT_RISK', store=store_filter, search=search_query) }}" 
+     class="btn {% if risk_filter == 'STOCKOUT_RISK' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-size: 0.85rem; padding: 0.45rem 1rem; border-color: rgba(239, 68, 68, 0.4);">
+    🔴 Stock-out Risk ({{ counts.STOCKOUT_RISK }})
+  </a>
+  <a href="{{ url_for('inventory', risk='LOW_STOCK', store=store_filter, search=search_query) }}" 
+     class="btn {% if risk_filter == 'LOW_STOCK' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-size: 0.85rem; padding: 0.45rem 1rem; border-color: rgba(245, 158, 11, 0.4);">
+    ⚠️ Low Stock Alerts ({{ counts.LOW_STOCK }})
+  </a>
+  <a href="{{ url_for('inventory', risk='OVERSTOCK_RISK', store=store_filter, search=search_query) }}" 
+     class="btn {% if risk_filter == 'OVERSTOCK_RISK' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-size: 0.85rem; padding: 0.45rem 1rem; border-color: rgba(139, 92, 246, 0.4);">
+    🟡 Overstocked ({{ counts.OVERSTOCK_RISK }})
+  </a>
+  <a href="{{ url_for('inventory', risk='NORMAL', store=store_filter, search=search_query) }}" 
+     class="btn {% if risk_filter == 'NORMAL' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-size: 0.85rem; padding: 0.45rem 1rem; border-color: rgba(16, 185, 129, 0.4);">
+    🟢 Optimal ({{ counts.NORMAL }})
+  </a>
+</div>
+
+<!-- Search and Store Filter Bar -->
+<div class="card" style="padding: 1rem 1.25rem; margin-bottom: 1.5rem;">
+  <form method="GET" action="{{ url_for('inventory') }}" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+    <input type="hidden" name="risk" value="{{ risk_filter }}">
+
+    <div style="flex: 1; min-width: 250px;">
+      <input type="text" name="search" class="form-control" placeholder="Search product ID, store ID, or department..." value="{{ search_query }}">
+    </div>
+
+    <div style="width: 180px;">
+      <select name="store" class="form-select" onchange="this.form.submit()">
+        <option value="ALL" {% if store_filter == 'ALL' %}selected{% endif %}>All Stores</option>
+        {% for s in stores %}
+        <option value="{{ s }}" {% if store_filter == s %}selected{% endif %}>Store: {{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <button type="submit" class="btn btn-secondary">
+      <i class="fa-solid fa-magnifying-glass"></i> Filter
+    </button>
+    {% if search_query or store_filter != 'ALL' or risk_filter != 'ALL' %}
+    <a href="{{ url_for('inventory') }}" class="btn btn-secondary" style="color: var(--text-dim);">
+      Reset
+    </a>
+    {% endif %}
+  </form>
+</div>
+
+<!-- Ledger Table -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">
+      <i class="fa-solid fa-warehouse" style="color: var(--accent-primary);"></i>
+      <span>Monitored Inventory Items ({{ total_filtered }} SKUs)</span>
+    </div>
+    <span class="badge badge-secondary">Daily Replenishment Ledger</span>
+  </div>
+
+  <div class="table-responsive">
+    <table class="custom-table">
+      <thead>
+        <tr>
+          <th>Product / Store</th>
+          <th>Dept</th>
+          <th>On-Hand</th>
+          <th>Predicted Demand</th>
+          <th>Safety Stock</th>
+          <th>Reorder Point (ROP)</th>
+          <th>Recommended Order</th>
+          <th>Risk Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if items %}
+          {% for item in items %}
+          <tr>
+            <td>
+              <strong>{{ item.product_id }}</strong>
+              <div style="font-size: 0.75rem; color: var(--text-dim);">Store: {{ item.store_id }}</div>
+            </td>
+            <td>
+              <span style="font-size: 0.8rem; color: var(--text-muted);">{{ item.dept }}</span>
+            </td>
+            <td>
+              <strong style="{% if item.risk_level == 'STOCKOUT_RISK' %}color: #fca5a5;{% elif item.risk_level == 'LOW_STOCK' %}color: #fcd34d;{% elif item.risk_level == 'OVERSTOCK_RISK' %}color: #c4b5fd;{% else %}color: #6ee7b7;{% endif %}">
+                {{ item.current_inventory }} units
+              </strong>
+              <div style="font-size: 0.75rem; color: var(--text-dim);">{{ item.days_of_supply }} days supply</div>
+            </td>
+            <td>
+              <div>{{ item.predicted_28d_demand }} units/mo</div>
+              <div style="font-size: 0.75rem; color: var(--text-dim);">({{ item.predicted_daily_demand }}/day)</div>
+            </td>
+            <td>{{ item.safety_stock }} units</td>
+            <td>{{ item.reorder_point }} units</td>
+            <td>
+              {% if item.recommended_order > 0 %}
+                <span class="badge badge-danger" style="font-size: 0.82rem;">
+                  +{{ item.recommended_order }} units
+                </span>
+              {% else %}
+                <span class="badge badge-success">
+                  0 (Healthy)
+                </span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge badge-{{ item.risk_badge }}">
+                {{ item.status }}
+              </span>
+            </td>
+            <td>
+              <a href="{{ url_for('predict') }}?item_id={{ item.product_id }}&store_id={{ item.store_id }}" class="btn btn-secondary" style="padding: 0.3rem 0.65rem; font-size: 0.78rem;">
+                Forecast
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="9" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+              No items matching current filter criteria.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

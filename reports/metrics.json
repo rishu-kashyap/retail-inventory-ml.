@@ -1,0 +1,78 @@
+{
+  "leaderboard": [
+    {
+      "model": "naive_28",
+      "MAE": 2.316,
+      "RMSE": 4.692,
+      "RMSSE": 1.0,
+      "sMAPE_%": 100.29,
+      "bias": -0.245
+    },
+    {
+      "model": "mean_28",
+      "MAE": 1.719,
+      "RMSE": 3.356,
+      "RMSSE": 0.715,
+      "sMAPE_%": 92.48,
+      "bias": -0.28
+    },
+    {
+      "model": "lgb_log",
+      "MAE": 1.698,
+      "RMSE": 3.407,
+      "RMSSE": 0.726,
+      "sMAPE_%": 97.05,
+      "bias": -0.498
+    },
+    {
+      "model": "lgb",
+      "MAE": 1.714,
+      "RMSE": 3.307,
+      "RMSSE": 0.705,
+      "sMAPE_%": 98.61,
+      "bias": -0.332
+    },
+    {
+      "model": "lgb_pois",
+      "MAE": 1.706,
+      "RMSE": 3.208,
+      "RMSSE": 0.684,
+      "sMAPE_%": 100.57,
+      "bias": -0.258
+    },
+    {
+      "model": "lgb_dept",
+      "MAE": 1.684,
+      "RMSE": 3.209,
+      "RMSSE": 0.684,
+      "sMAPE_%": 92.85,
+      "bias": -0.342
+    },
+    {
+      "model": "blend",
+      "MAE": 1.702,
+      "RMSE": 3.281,
+      "RMSSE": 0.699,
+      "sMAPE_%": 99.2,
+      "bias": -0.359
+    },
+    {
+      "model": "hedged",
+      "MAE": 2.181,
+      "RMSE": 4.142,
+      "RMSSE": 0.883,
+      "sMAPE_%": 102.08,
+      "bias": 0.581
+    }
+  ],
+  "wrmssse": {
+    "naive_28": 1.0504,
+    "mean_28": 0.7291,
+    "lgb_log": 0.7105,
+    "lgb": 0.7114,
+    "lgb_pois": 0.6982,
+    "lgb_dept": 0.7012,
+    "blend": 0.703,
+    "hedged": 0.9473
+  }
+}

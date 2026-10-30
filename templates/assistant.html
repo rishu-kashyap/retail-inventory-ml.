@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}AI Decision Assistant | RetailOpt AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Natural Language Inventory Assistant</h1>
+    <p class="page-subtitle">AI decision-support layer for conversational inventory queries, stockout explanations, and procurement guidance.</p>
+  </div>
+  <a href="{{ url_for('inventory') }}" class="btn btn-secondary">
+    <i class="fa-solid fa-list-check"></i> View Risk Ledger
+  </a>
+</div>
+
+<div style="max-width: 900px; margin: 0 auto;">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <i class="fa-solid fa-robot" style="color: #818cf8;"></i>
+        <span>Inventory Decision-Support Copilot</span>
+      </div>
+      <span class="badge badge-success"><i class="fa-solid fa-circle" style="font-size: 0.5rem; color: #10b981;"></i> Grounded on Live Data</span>
+    </div>
+
+    <!-- Chat Window -->
+    <div class="chat-box" style="height: 480px;">
+      <div class="chat-messages" id="fullChatMessages">
+        <div class="chat-bubble bot">
+          👋 <strong>Welcome!</strong> I am your Retail Inventory AI Assistant.
+          <br><br>
+          I am grounded in your LightGBM demand predictions, on-hand inventory levels, safety stock calculations, and store metrics. You can query me using natural language to uncover stockout risks, identify excess inventory, or explain why specific items are recommended for reordering.
+        </div>
+      </div>
+
+      <div class="chat-input-area">
+        <input type="text" id="fullChatInput" class="form-control" placeholder="Ask a question about stockout risks, overstocks, or specific SKUs...">
+        <button id="fullChatSend" class="btn btn-primary">
+          <i class="fa-solid fa-paper-plane"></i> Send Query
+        </button>
+      </div>
+    </div>
+
+    <!-- Quick Prompt Suggestions -->
+    <div style="margin-top: 1rem;">
+      <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.4rem; font-weight: 600;">
+        SUGGESTED QUERIES (AS DESCRIBED IN PROJECT VALIDATION DOCUMENT):
+      </div>
+      <div class="prompt-chips">
+        <span class="chip" onclick="submitPrompt('Which products are at the highest stockout risk?')">
+          🔴 Which products are at the highest stockout risk?
+        </span>
+        <span class="chip" onclick="submitPrompt('Which products may be overstocked?')">
+          🟡 Which products may be overstocked?
+        </span>
+        <span class="chip" onclick="submitPrompt('Explain why product FOODS_3_120 was flagged for reorder')">
+          🔍 Why was FOODS_3_120 flagged?
+        </span>
+        <span class="chip" onclick="submitPrompt('What are our overall inventory savings and fill rate improvement?')">
+          💰 Quantified savings and fill rate
+        </span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const chatMessages = document.getElementById('fullChatMessages');
+  const chatInput = document.getElementById('fullChatInput');
+  const chatSend = document.getElementById('fullChatSend');
+
+  async function submitPrompt(query) {
+    if (!query.trim()) return;
+
+    // Add user bubble
+    const userDiv = document.createElement('div');
+    userDiv.className = 'chat-bubble user';
+    userDiv.textContent = query;
+    chatMessages.appendChild(userDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    // Add loading indicator
+    const botDiv = document.createElement('div');
+    botDiv.className = 'chat-bubble bot';
+    botDiv.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Analyzing live inventory models & ledger...';
+    chatMessages.appendChild(botDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    try {
+      const res = await fetch('/api/assistant', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({query: query})
+      });
+      const data = await res.json();
+      botDiv.innerHTML = data.answer.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    } catch(err) {
+      botDiv.textContent = "Error communicating with AI service.";
+    }
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  chatSend.addEventListener('click', () => {
+    submitPrompt(chatInput.value);
+    chatInput.value = '';
+  });
+
+  chatInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      chatSend.click();
+    }
+  });
+</script>
+{% endblock %}

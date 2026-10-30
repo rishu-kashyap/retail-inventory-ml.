@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Demand Forecast & Reorder Engine | RetailOpt AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Demand Forecast & Reorder Optimization</h1>
+    <p class="page-subtitle">Combines LightGBM demand forecasting with safety stock formulas and (s, S) continuous review.</p>
+  </div>
+  <a href="{{ url_for('inventory') }}" class="btn btn-secondary">
+    <i class="fa-solid fa-list-check"></i> View Full Inventory Ledger
+  </a>
+</div>
+
+<div style="display: grid; grid-template-columns: 1.1fr 1.3fr; gap: 1.75rem;">
+
+  <!-- Form Column -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <i class="fa-solid fa-sliders" style="color: var(--accent-primary);"></i>
+        <span>Product & Store Parameters</span>
+      </div>
+      <span class="badge badge-secondary">ML Inputs</span>
+    </div>
+
+    <form method="POST" action="{{ url_for('predict') }}">
+      <div class="form-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 1.25rem;">
+        
+        <div class="form-group">
+          <label class="form-label">Store Location</label>
+          <select name="store_id" id="storeSelect" class="form-select">
+            {% for s in stores %}
+            <option value="{{ s }}" {% if s == selected_store %}selected{% endif %}>Store: {{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Product / SKU</label>
+          <select name="item_id" id="itemSelect" class="form-select">
+            {% for it in items %}
+            <option value="{{ it }}" {% if it == selected_item %}selected{% endif %}>{{ it }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Current On-Hand Stock (units)</label>
+          <input type="number" step="1" name="current_inventory" id="currInv" class="form-control" value="{{ current_inventory }}" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Supplier Lead Time (days)</label>
+          <input type="number" step="1" name="lead_time_days" id="leadTime" class="form-control" value="{{ lead_time }}" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Unit Cost (₹)</label>
+          <input type="number" step="0.01" name="unit_cost" id="unitCost" class="form-control" value="{{ unit_cost }}" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Unit Selling Price (₹)</label>
+          <input type="number" step="0.01" name="unit_price" id="unitPrice" class="form-control" value="{{ unit_price }}" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Target Service Level (Fill Rate)</label>
+          <select name="service_level" class="form-select">
+            <option value="0.90" {% if service_level == 0.90 %}selected{% endif %}>90% (Standard Non-Critical)</option>
+            <option value="0.95" {% if service_level == 0.95 %}selected{% endif %}>95% (Recommended Retail Default)</option>
+            <option value="0.98" {% if service_level == 0.98 %}selected{% endif %}>98% (High Priority / Fast Mover)</option>
+            <option value="0.99" {% if service_level == 0.99 %}selected{% endif %}>99% (Mission Critical A-Items)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Retail Conditions</label>
+          <div style="display: flex; gap: 1rem; align-items: center; margin-top: 0.5rem;">
+            <label style="font-size: 0.85rem; display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+              <input type="checkbox" name="in_promo" value="1" {% if in_promo %}checked{% endif %}> In Promotion
+            </label>
+            <label style="font-size: 0.85rem; display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+              <input type="checkbox" name="is_weekend" value="1" {% if is_weekend %}checked{% endif %}> Weekend
+            </label>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+        <button type="submit" class="btn btn-primary" style="width: 100%;">
+          <i class="fa-solid fa-bolt"></i> Generate Forecast & Reorder Plan
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Output Decision-Support Column -->
+  <div>
+    {% if result %}
+    <div class="card" style="border-top: 4px solid {% if result.risk_badge == 'danger' %}var(--status-danger){% elif result.risk_badge == 'warning' %}var(--status-warning){% elif result.risk_badge == 'secondary' %}var(--status-secondary){% else %}var(--status-success){% endif %};">
+      
+      <div class="card-header">
+        <div>
+          <div style="font-size: 0.8rem; color: var(--text-dim); text-transform: uppercase; font-weight: 600;">System Decision Output</div>
+          <h2 style="font-size: 1.35rem; font-weight: 700; margin-top: 0.1rem;">
+            Product: {{ result.product_id }} <span style="font-weight: 400; color: var(--text-muted); font-size: 1.05rem;">({{ result.store_id }})</span>
+          </h2>
+        </div>
+        <span class="badge badge-{{ result.risk_badge }}" style="font-size: 0.85rem; padding: 0.35rem 0.85rem;">
+          {{ result.status }}
+        </span>
+      </div>
+
+      <!-- Core Specs Table (Matches Page 3 of Validation Document) -->
+      <div style="background: rgba(0, 0, 0, 0.25); border-radius: var(--radius-sm); padding: 1.25rem; margin-bottom: 1.25rem; border: 1px solid var(--border-color);">
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
+          
+          <div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase;">Current Inventory</div>
+            <div style="font-size: 1.4rem; font-weight: 700; color: var(--text-main);">{{ result.current_inventory }} units</div>
+          </div>
+
+          <div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase;">Predicted Demand (28d Horizon)</div>
+            <div style="font-size: 1.4rem; font-weight: 700; color: #818cf8;">{{ result.predicted_horizon_demand }} units</div>
+            <div style="font-size: 0.75rem; color: var(--text-dim);">Avg {{ result.predicted_daily_demand }} units/day</div>
+          </div>
+
+          <div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase;">Safety Stock (SS) Buffer</div>
+            <div style="font-size: 1.4rem; font-weight: 700; color: #34d399;">{{ result.safety_stock }} units</div>
+            <div style="font-size: 0.75rem; color: var(--text-dim);">Service Factor: {{ result.service_level_pct }}%</div>
+          </div>
+
+          <div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase;">Reorder Point (ROP)</div>
+            <div style="font-size: 1.4rem; font-weight: 700; color: #fbbf24;">{{ result.reorder_point }} units</div>
+            <div style="font-size: 0.75rem; color: var(--text-dim);">Lead time demand + SS</div>
+          </div>
+
+        </div>
+
+        <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Recommended Reorder Quantity</div>
+            <div style="font-size: 1.85rem; font-weight: 800; color: {% if result.recommended_order > 0 %}#fca5a5{% else %}#34d399{% endif %};">
+              {{ result.recommended_order }} units
+            </div>
+          </div>
+          <div>
+            <span class="badge badge-{{ result.risk_badge }}" style="font-size: 0.9rem; padding: 0.4rem 1rem;">
+              Status: {{ result.status }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Natural Language AI Explanation Layer (Sections 6 & 7 in Document) -->
+      <div style="background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: var(--radius-sm); padding: 1.15rem; margin-bottom: 1.25rem;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; color: #a5b4fc; font-weight: 600; font-size: 0.88rem;">
+          <i class="fa-solid fa-sparkles"></i> AI Explanation & Reasoning
+        </div>
+        <p style="font-size: 0.9rem; color: #e0e7ff; line-height: 1.5;">
+          {{ result.explanation }}
+        </p>
+      </div>
+
+      <!-- Extra Operational Metrics -->
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; font-size: 0.85rem; text-align: center;">
+        <div style="background: rgba(255, 255, 255, 0.02); padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+          <div style="color: var(--text-dim); font-size: 0.75rem;">Days of Supply</div>
+          <div style="font-weight: 700; font-size: 1.05rem;">{{ result.days_of_supply }} days</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.02); padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+          <div style="color: var(--text-dim); font-size: 0.75rem;">Economic Order Qty (EOQ)</div>
+          <div style="font-weight: 700; font-size: 1.05rem;">{{ result.eoq }} units</div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.02); padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+          <div style="color: var(--text-dim); font-size: 0.75rem;">ABC-XYZ Segment</div>
+          <div style="font-weight: 700; font-size: 1.05rem; color: #a78bfa;">{{ result.segment }}</div>
+        </div>
+      </div>
+
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Dynamic SKU change auto-fill
+  const itemSelect = document.getElementById('itemSelect');
+  const storeSelect = document.getElementById('storeSelect');
+  
+  async function updateSkuDefaults() {
+    const store = storeSelect.value;
+    const item = itemSelect.value;
+    try {
+      const res = await fetch(`/api/sku-profile/${store}/${item}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.unit_cost) document.getElementById('unitCost').value = data.unit_cost;
+        if (data.unit_price) document.getElementById('unitPrice').value = data.unit_price;
+        if (data.lead_time) document.getElementById('leadTime').value = data.lead_time;
+      }
+    } catch(e) {
+      console.log('Lookup error', e);
+    }
+  }
+
+  itemSelect.addEventListener('change', updateSkuDefaults);
+  storeSelect.addEventListener('change', updateSkuDefaults);
+</script>
+{% endblock %}
